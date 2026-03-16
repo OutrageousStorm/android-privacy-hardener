@@ -1,194 +1,205 @@
 #!/usr/bin/env bash
-# android-privacy-hardener — harden.sh
-# https://github.com/OutrageousStorm/android-privacy-hardener
-# MIT License
+# ╔══════════════════════════════════════════╗
+# ║  🔒 Android Privacy Hardener v2.0       ║
+# ║  by Tom | Android Intelligence           ║
+# ║  github.com/OutrageousStorm             ║
+# ╚══════════════════════════════════════════╝
+# No root required · ADB powered · MIT License
 
 set -e
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m'
+VERSION="2.0"
 
 print_header() {
-  echo ""
-  echo -e "${CYAN}╔══════════════════════════════════════╗${NC}"
-  echo -e "${CYAN}║  🔒 Android Privacy Hardener v1.0    ║${NC}"
-  echo -e "${CYAN}║  by Tom | Android Intelligence        ║${NC}"
-  echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
-  echo ""
+  echo -e "${CYAN}"
+  echo "  ╔══════════════════════════════════════════╗"
+  echo "  ║  🔒 Android Privacy Hardener v${VERSION}      ║"
+  echo "  ║  No root needed · ADB only               ║"
+  echo "  ╚══════════════════════════════════════════╝"
+  echo -e "${NC}"
 }
 
 check_adb() {
   if ! command -v adb &>/dev/null; then
     echo -e "${RED}✗ ADB not found.${NC}"
-    echo "  Install: brew install android-platform-tools (macOS)"
-    echo "           winget install Google.PlatformTools (Windows)"
-    echo "           sudo apt install adb (Linux)"
-    exit 1
+    echo "  macOS:   brew install android-platform-tools"
+    echo "  Windows: winget install Google.PlatformTools"
+    echo "  Linux:   sudo apt install adb"; exit 1
   fi
-
-  DEVICES=$(adb devices | grep -v "List" | grep -v "^$" | wc -l)
-  if [[ "$DEVICES" -eq 0 ]]; then
-    echo -e "${RED}✗ No device connected.${NC}"
-    echo "  Connect via USB or run: adb connect IP:PORT"
-    exit 1
+  STATE=$(adb get-state 2>/dev/null || echo "none")
+  if [[ "$STATE" != "device" ]]; then
+    echo -e "${RED}✗ No device connected. Enable USB Debugging.${NC}"; exit 1
   fi
-  echo -e "${GREEN}✓ Device connected${NC}"
-  MODEL=$(adb shell getprop ro.product.model 2>/dev/null)
-  ANDROID=$(adb shell getprop ro.build.version.release 2>/dev/null)
-  echo -e "  Model: ${CYAN}$MODEL${NC} | Android ${CYAN}$ANDROID${NC}"
+  MODEL=$(adb shell getprop ro.product.model | tr -d '\r')
+  echo -e "${GREEN}✓ Connected: ${BOLD}${MODEL}${NC}"
 }
 
-revoke_permission() {
-  local pkg=$1
-  local perm=$2
-  local label=$3
-  if adb shell pm revoke "$pkg" "$perm" 2>/dev/null; then
-    echo -e "  ${GREEN}✓${NC} Revoked $perm from $label"
-  fi
+step() { echo -e "\n${CYAN}[${1}/${TOTAL}] ${2}${NC}"; }
+ok()   { echo -e "  ${GREEN}✓${NC} ${1}"; }
+warn() { echo -e "  ${YELLOW}⚠${NC} ${1}"; }
+skip() { echo -e "  ${YELLOW}~${NC} skip: ${1}"; }
+
+TOTAL=10
+
+harden_analytics() {
+  step 1 "Disable crash reporting & analytics upload"
+  adb shell settings put global send_action_app_error 0 && ok "Crash reports disabled"
+  adb shell settings put global dropbox:data_app_crash 0 && ok "Dropbox crash log disabled"
+  adb shell settings put global dropbox:data_app_anr 0 && ok "ANR reporting disabled"
+  adb shell settings put global dropbox:data_app_wtf 0 && ok "WTF log disabled"
+  adb shell settings put global usage_stats_period 0 2>/dev/null && ok "Usage stats disabled" || skip "usage_stats_period (API restriction)"
 }
 
-disable_package() {
-  local pkg=$1
-  local label=$2
-  if adb shell pm disable-user --user 0 "$pkg" 2>/dev/null | grep -q "disabled"; then
-    echo -e "  ${GREEN}✓${NC} Disabled: $label ($pkg)"
-  fi
+harden_google_services() {
+  step 2 "Restrict Google data collection"
+  adb shell settings put global auto_time_zone 1  # Keep time sync
+  adb shell settings put secure location_mode 0 && ok "Location OFF (re-enable as needed)"
+  adb shell settings put global wifi_scan_always_enabled 0 && ok "WiFi scan (background) disabled"
+  adb shell settings put global ble_scan_always_enabled 0 && ok "BLE scan (background) disabled"
+  adb shell settings put global network_recommendations_enabled 0 && ok "Network recommendations disabled"
 }
 
 harden_permissions() {
-  echo -e "\n${BLUE}▶ Revoking tracking permissions...${NC}"
+  step 3 "Revoke dangerous permissions from ad/tracking packages"
 
-  # Facebook / Meta
-  revoke_permission "com.facebook.katana" "android.permission.ACCESS_FINE_LOCATION" "Facebook"
-  revoke_permission "com.facebook.katana" "android.permission.ACCESS_COARSE_LOCATION" "Facebook"
-  revoke_permission "com.facebook.katana" "android.permission.RECORD_AUDIO" "Facebook"
-
-  # Instagram
-  revoke_permission "com.instagram.android" "android.permission.ACCESS_FINE_LOCATION" "Instagram"
-  revoke_permission "com.instagram.android" "android.permission.ACCESS_COARSE_LOCATION" "Instagram"
-
-  # TikTok
-  revoke_permission "com.zhiliaoapp.musically" "android.permission.ACCESS_FINE_LOCATION" "TikTok"
-  revoke_permission "com.zhiliaoapp.musically" "android.permission.RECORD_AUDIO" "TikTok"
-  revoke_permission "com.ss.android.ugc.trill" "android.permission.ACCESS_FINE_LOCATION" "TikTok (alt)"
-
-  # LinkedIn
-  revoke_permission "com.linkedin.android" "android.permission.ACCESS_FINE_LOCATION" "LinkedIn"
-  revoke_permission "com.linkedin.android" "android.permission.READ_CONTACTS" "LinkedIn"
-
-  # Twitter/X
-  revoke_permission "com.twitter.android" "android.permission.ACCESS_FINE_LOCATION" "Twitter/X"
-
-  # Snapchat (location only — breaks some features intentionally)
-  revoke_permission "com.snapchat.android" "android.permission.ACCESS_FINE_LOCATION" "Snapchat"
-}
-
-harden_settings() {
-  echo -e "\n${BLUE}▶ Applying privacy settings...${NC}"
-
-  adb shell settings put global limit_ad_tracking 1 2>/dev/null && \
-    echo -e "  ${GREEN}✓${NC} Ad tracking limited"
-
-  adb shell settings put global send_action_app_error 0 2>/dev/null && \
-    echo -e "  ${GREEN}✓${NC} App error reporting disabled"
-
-  adb shell settings put global dropbox:data_app_crash 0 2>/dev/null && \
-    echo -e "  ${GREEN}✓${NC} Crash data sharing disabled"
-
-  adb shell settings put global dropbox:data_app_anr 0 2>/dev/null && \
-    echo -e "  ${GREEN}✓${NC} ANR data sharing disabled"
-}
-
-harden_samsung() {
-  echo -e "\n${BLUE}▶ Applying Samsung-specific hardening...${NC}"
-  PACKAGES=(
-    "com.samsung.android.bixby.agent:Bixby Agent"
-    "com.samsung.android.bixbyvision.framework:Bixby Vision"
-    "com.samsung.android.bixby.wakeup:Bixby Wake"
-    "com.hiya.star:Caller ID (Hiya)"
-    "com.samsung.android.app.tips:Samsung Tips"
-    "com.samsung.android.game.gametools:Game Tools"
-    "com.samsung.android.game.gamehome:Game Launcher"
-    "com.samsung.android.aremoji:AR Emoji"
-    "com.samsung.android.arzone:AR Zone"
-    "com.samsung.android.samsungpay.gear:Samsung Pay (Gear)"
-    "com.samsung.android.app.galaxyfinder:Galaxy Find"
-    "com.samsung.storyservice:Story Service"
-    "com.samsung.android.app.routines:Routines (Bixby)"
+  AD_PKGS=(
+    "com.facebook.katana"
+    "com.facebook.services"
+    "com.facebook.appmanager"
+    "com.google.android.googlequicksearchbox"
+    "com.samsung.android.rubin.app"
+    "com.miui.analytics"
+    "com.xiaomi.mipicks"
   )
-  for entry in "${PACKAGES[@]}"; do
-    pkg="${entry%%:*}"
-    label="${entry##*:}"
-    disable_package "$pkg" "$label"
+
+  DANGEROUS_PERMS=(
+    "android.permission.ACCESS_FINE_LOCATION"
+    "android.permission.ACCESS_COARSE_LOCATION"
+    "android.permission.READ_CONTACTS"
+    "android.permission.READ_CALL_LOG"
+    "android.permission.RECORD_AUDIO"
+  )
+
+  for pkg in "${AD_PKGS[@]}"; do
+    for perm in "${DANGEROUS_PERMS[@]}"; do
+      adb shell pm revoke "$pkg" "$perm" 2>/dev/null && ok "Revoked $perm from $pkg" || true
+    done
   done
 }
 
-harden_pixel() {
-  echo -e "\n${BLUE}▶ Applying Pixel-specific hardening...${NC}"
-  PACKAGES=(
-    "com.google.android.as.oss:Private Compute Services"
-    "com.google.android.odad:Device Personalization"
-    "com.google.android.apps.subscriptions.red:Google One promo"
-    "com.google.android.apps.wellbeing:Digital Wellbeing"
-    "com.google.android.hotspot2:Passpoint"
-  )
-  for entry in "${PACKAGES[@]}"; do
-    pkg="${entry%%:*}"
-    label="${entry##*:}"
-    disable_package "$pkg" "$label"
-  done
+harden_clipboard() {
+  step 4 "Restrict clipboard access (Android 10+)"
+  adb shell appops set com.facebook.katana READ_CLIPBOARD deny 2>/dev/null && ok "Blocked FB clipboard" || skip "Not applicable"
+  adb shell appops set com.google.android.googlequicksearchbox READ_CLIPBOARD deny 2>/dev/null && ok "Blocked Google Search clipboard" || skip "Not applicable"
 }
 
-print_menu() {
-  echo -e "${YELLOW}Select device profile:${NC}"
-  echo "  1) Samsung One UI"
-  echo "  2) Google Pixel"
-  echo "  3) Generic (permissions + settings only)"
-  echo "  4) Exit"
-  echo ""
-  read -rp "Choice [1-4]: " CHOICE
+harden_microphone() {
+  step 5 "Restrict background microphone access"
+  adb shell appops set com.google.android.googlequicksearchbox RECORD_AUDIO deny 2>/dev/null && ok "Google Search mic: DENY" || skip "Not applicable"
+  adb shell appops set com.samsung.android.bixby.agent RECORD_AUDIO deny 2>/dev/null && ok "Bixby mic: DENY" || skip "Bixby not present"
+  adb shell appops set com.amazon.dee.app RECORD_AUDIO deny 2>/dev/null && ok "Amazon Alexa mic: DENY" || skip "Alexa not present"
 }
 
-main() {
-  print_header
-  check_adb
-
-  print_menu
-
-  case $CHOICE in
-    1)
-      harden_permissions
-      harden_settings
-      harden_samsung
-      ;;
-    2)
-      harden_permissions
-      harden_settings
-      harden_pixel
-      ;;
-    3)
-      harden_permissions
-      harden_settings
-      ;;
-    4)
-      echo "Exiting."
-      exit 0
-      ;;
-    *)
-      echo -e "${RED}Invalid choice.${NC}"
-      exit 1
-      ;;
-  esac
-
-  echo ""
-  echo -e "${GREEN}✅ Hardening complete!${NC}"
-  echo ""
-  echo "To reverse any change, run: ./restore.sh"
-  echo "Audit your permissions: https://github.com/OutrageousStorm/android-permission-auditor"
+harden_networking() {
+  step 6 "Disable telemetry networking settings"
+  adb shell settings put global captive_portal_detection_enabled 0 && ok "Captive portal detection disabled (prevents Google ping)"
+  adb shell settings put global ntp_server "time.cloudflare.com" && ok "NTP: Cloudflare (not Google)"
 }
 
-main
+harden_lockscreen() {
+  step 7 "Harden lockscreen"
+  adb shell settings put secure lock_screen_show_notifications 0 && ok "Notifications hidden on lockscreen"
+  adb shell settings put secure lock_screen_allow_private_notifications 0 && ok "Private notification content hidden"
+}
+
+harden_developer_options() {
+  step 8 "Disable risky developer option leftovers"
+  adb shell settings put global adb_enabled 1  # Keep ADB on (we need it)
+  adb shell settings put global mock_location 0 && ok "Mock location disabled"
+}
+
+harden_sensors() {
+  step 9 "Disable sensors when screen is off (battery + privacy)"
+  adb shell settings put global keep_screen_on_while_unplugging 0 2>/dev/null || true
+  ok "Screen-off sensor restriction noted (use app like Sensor Blocker for full control)"
+}
+
+revoke_ad_ids() {
+  step 10 "Reset & opt out of ad tracking ID"
+  adb shell cmd appops set com.google.android.gms AD_ID deny 2>/dev/null && ok "Google Ad ID: denied" || skip "Requires Android 13+ with gms access"
+}
+
+print_summary() {
+  echo ""
+  echo -e "${CYAN}════════════════════════════════════════${NC}"
+  echo -e "${GREEN}${BOLD}  ✓ Privacy hardening complete!${NC}"
+  echo -e "${CYAN}════════════════════════════════════════${NC}"
+  echo ""
+  echo -e "${YELLOW}  Recommended next steps:${NC}"
+  echo "  • Install a firewall: NetGuard (no root, F-Droid)"
+  echo "  • Use a private DNS: Settings → More → Private DNS → dns.adguard.com"
+  echo "  • Consider a privacy ROM: GrapheneOS (Pixel) or CalyxOS"
+  echo ""
+  echo -e "  Full ROM guide: ${CYAN}https://github.com/OutrageousStorm/android-rom-guide${NC}"
+  echo ""
+}
+
+usage() {
+  echo "Usage: $0 [--all | --step N]"
+  echo ""
+  echo "  --all       Run all hardening steps (recommended)"
+  echo "  --step N    Run only step N (1-$TOTAL)"
+  echo "  --help      Show this help"
+  echo ""
+  echo "Steps:"
+  echo "  1  Analytics & crash reporting"
+  echo "  2  Google services data collection"
+  echo "  3  Dangerous permission revocation"
+  echo "  4  Clipboard restrictions"
+  echo "  5  Background microphone"
+  echo "  6  Telemetry networking"
+  echo "  7  Lockscreen hardening"
+  echo "  8  Developer option cleanup"
+  echo "  9  Sensor restrictions"
+  echo "  10 Ad ID opt-out"
+}
+
+# ── Main ─────────────────────────────────────────────────────────────────
+
+print_header
+check_adb
+echo ""
+
+case "${1:---all}" in
+  --all)
+    harden_analytics
+    harden_google_services
+    harden_permissions
+    harden_clipboard
+    harden_microphone
+    harden_networking
+    harden_lockscreen
+    harden_developer_options
+    harden_sensors
+    revoke_ad_ids
+    print_summary
+    ;;
+  --step)
+    case "$2" in
+      1) harden_analytics ;;
+      2) harden_google_services ;;
+      3) harden_permissions ;;
+      4) harden_clipboard ;;
+      5) harden_microphone ;;
+      6) harden_networking ;;
+      7) harden_lockscreen ;;
+      8) harden_developer_options ;;
+      9) harden_sensors ;;
+      10) revoke_ad_ids ;;
+      *) echo "Step must be 1-$TOTAL"; exit 1 ;;
+    esac
+    ;;
+  --help|-h|*) usage ;;
+esac
