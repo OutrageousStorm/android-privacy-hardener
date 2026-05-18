@@ -1,0 +1,74 @@
+{
+  "profiles": {
+    "minimal": {
+      "description": "Bare minimum \u2014 just ad tracking + location",
+      "rules": [
+        {
+          "namespace": "global",
+          "setting": "limit_ad_tracking",
+          "value": "1"
+        },
+        {
+          "namespace": "secure",
+          "setting": "location_mode",
+          "value": "0"
+        }
+      ]
+    },
+    "intermediate": {
+      "description": "Level 2 \u2014 disable scans, telemetry",
+      "rules": [
+        {
+          "namespace": "global",
+          "setting": "limit_ad_tracking",
+          "value": "1"
+        },
+        {
+          "namespace": "secure",
+          "setting": "location_mode",
+          "value": "0"
+        },
+        {
+          "namespace": "global",
+          "setting": "wifi_scan_always_enabled",
+          "value": "0"
+        },
+        {
+          "namespace": "global",
+          "setting": "ble_scan_always_enabled",
+          "value": "0"
+        }
+      ]
+    },
+    "aggressive": {
+      "description": "Level 3 + Magisk + custom ROM",
+      "rules": [
+        {
+          "namespace": "global",
+          "setting": "limit_ad_tracking",
+          "value": "1"
+        },
+        {
+          "namespace": "secure",
+          "setting": "location_mode",
+          "value": "0"
+        },
+        {
+          "namespace": "global",
+          "setting": "wifi_scan_always_enabled",
+          "value": "0"
+        },
+        {
+          "namespace": "global",
+          "setting": "ble_scan_always_enabled",
+          "value": "0"
+        },
+        {
+          "namespace": "global",
+          "setting": "adb_enabled",
+          "value": "0"
+        }
+      ]
+    }
+  }
+}
