@@ -1,25 +1,30 @@
 #!/usr/bin/env python3
-"""Granular permission presets for different privacy levels"""
-import json
+"""Pre-built permission presets: minimal, balanced, paranoid"""
+import subprocess, json
+
 PRESETS = {
     'minimal': {
-        'revoke': ['LOCATION', 'CONTACTS', 'CAMERA', 'MICROPHONE', 'PHONE_STATE'],
-        'desc': 'Remove location, contacts, camera, mic, and phone state'
+        'allow': ['INTERNET', 'ACCESS_NETWORK_STATE'],
+        'revoke': ['LOCATION', 'CONTACTS', 'CAMERA', 'MICROPHONE', 'SMS', 'CALL_LOG'],
     },
     'balanced': {
-        'revoke': ['ACCESS_BACKGROUND_LOCATION', 'READ_CALL_LOG', 'READ_SMS', 'RECORD_AUDIO'],
-        'desc': 'Keep basic functionality, remove background tracking'
+        'allow': ['INTERNET', 'LOCATION', 'CAMERA', 'MICROPHONE'],
+        'revoke': ['CONTACTS', 'READ_SMS', 'CALL_LOG', 'ACCESS_FINE_LOCATION'],
     },
     'paranoid': {
-        'revoke': ['LOCATION', 'CONTACTS', 'CAMERA', 'MICROPHONE', 'PHONE_STATE', 'BODY_SENSORS', 'ACTIVITY_RECOGNITION'],
-        'desc': 'Remove everything possible'
-    }
+        'allow': [],  # Revoke everything
+        'revoke': ['ALL'],
+    },
 }
+
+def apply_preset(app, preset_name):
+    preset = PRESETS.get(preset_name, {})
+    for perm in preset.get('revoke', []):
+        subprocess.run(['adb', 'shell', 'pm', 'revoke', app, f'android.permission.{perm}'])
+
 if __name__ == '__main__':
-    import sys, subprocess
-    preset = sys.argv[1] if len(sys.argv) > 1 else 'balanced'
-    perms = PRESETS.get(preset, {}).get('revoke', [])
-    print(f"Applying {preset} preset: {PRESETS[preset]['desc']}")
-    for perm in perms:
-        subprocess.run(['adb', 'shell', 'pm', 'revoke', '--all', f'android.permission.{perm}'], capture_output=True)
-        print(f"  ✓ revoked {perm}")
+    import sys
+    if len(sys.argv) < 3:
+        print("Usage: permission_presets.py <app_pkg> <minimal|balanced|paranoid>")
+        sys.exit(1)
+    apply_preset(sys.argv[1], sys.argv[2])
